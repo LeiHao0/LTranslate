@@ -24,34 +24,56 @@ def markdown(lines):
         transLine = ""
         l = line.lstrip(' ')
         leadingSpaces = len(line) - len(l)
-        if l.strip() == '<!--more-->' or not l.strip():
+        if l.strip() == '<!--more-->' or l.strip() == '---' or l.strip() == '':
             transLine = l
-        elif l.startswith(('```', '{% ', '<details>')):
+        elif l.startswith('title: '):
+            transLine = 'title: ' + translate(l[6:])
+        elif l.startswith(('$$', '![](', 'type: ', 'date: ', 'update: ', 'updated: ', 'permalink: ', 'tags: ', 'mathjax: ')):
+            transLine = l
+        elif l.startswith(('```', '{% ', '<details>', '</details>')):
             skip = not skip
             transLine = l
+        elif l.startswith('1. '):
+            transLine = '1. ' + translate(l[3:])
+        elif l.startswith('> '):
+            transLine = '> ' + translate(l[1:])
         elif l.startswith('- '):
             transLine = '- ' + translate(l[1:])
-        elif l.startswith('$$'):
-            transLine = l
+        elif l.startswith('# '):
+            transLine = '# ' + translate(l[1:])
+        elif l.startswith('## '):
+            transLine = '## ' + translate(l[2:])
+        elif l.startswith('### '):
+            transLine = '### ' + translate(l[3:])
+        elif l.startswith('#### '):
+            transLine = '#### ' + translate(l[4:])
+        elif l.startswith('type: '):
+            transLine = 'type: ' + translate(l[5:])
         else:
             if skip:
                 transLine = l
             else:
                 transLine = translate(l)
+        for k, v in {'【': '[', '（': '(', '）': ')', '【': ']'}.items():
+            transLine = transLine.replace(k, v)
+
         transLine = ' '*leadingSpaces + transLine + '\n'
-        print(line, ' -> ', transLine)
+        # print(line, ' -> ', transLine)
         transText += transLine
 
-    print('\n\n', '-'*80, '\n\n', transText)
+    # print('\n\n', '-'*80, '\n\n', transText)
     return transText
 
 
 def file2Lines():
-    return [line.rstrip('\n') for line in open(filename)]
+    f = open(filename, 'r')
+    lines = [line.rstrip('\n') for line in f]
+    f.close()
+    return lines
 
 
 def trans2File(transText):
-    f = open(os.path.splitext(filename)[0]+"_" + lang_tgt + ".md", 'w')
+    f = open(filename, 'w')
     f.write(transText)
     f.close()
 
@@ -59,6 +81,7 @@ def trans2File(transText):
 def main(argv):
     global filename, lang_src, lang_tgt
     filename, lang_src, lang_tgt = argv
+
     trans2File(markdown(file2Lines()))
 
 
