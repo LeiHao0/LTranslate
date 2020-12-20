@@ -14,7 +14,7 @@ translator = google_translator()
 
 
 def translate(text):
-    return translator.translate(text, lang_src=lang_src, lang_tgt=lang_tgt)
+    return translator.translate(text, lang_tgt=lang_tgt)
 
 
 def markdown(lines):
@@ -30,7 +30,7 @@ def markdown(lines):
             transLine = 'title: ' + translate(l[6:])
         elif l.startswith(('$$', '![](', 'type: ', 'date: ', 'update: ', 'updated: ', 'permalink: ', 'tags: ', 'mathjax: ')):
             transLine = l
-        elif l.startswith(('```', '{% ', '<details>', '</details>')):
+        elif l.startswith(('```', '{% ', '<details>', '</details>', '<div ', '</div>', '<video ', '</video>')):
             skip = not skip
             transLine = l
         elif l.startswith('1. '):
@@ -56,6 +56,8 @@ def markdown(lines):
                 transLine = translate(l)
         for k, v in {'【': '[', '（': '(', '）': ')', '【': ']'}.items():
             transLine = transLine.replace(k, v)
+        transLine = transLine.replace('] (', '](')
+        transLine = transLine.replace('/cn/', f'/{lang_tgt}/')
 
         transLine = ' '*leadingSpaces + transLine + '\n'
         # print(line, ' -> ', transLine)
@@ -79,8 +81,13 @@ def trans2File(transText):
 
 
 def main(argv):
-    global filename, lang_src, lang_tgt
-    filename, lang_src, lang_tgt = argv
+    global filename, lang_tgt
+    filename, lang_tgt = argv
+
+    if lang_tgt == "tw":
+        lang_tgt = "zh-TW"
+    if lang_tgt == "cn":
+        lang_tgt = "zh-CN"
 
     trans2File(markdown(file2Lines()))
 

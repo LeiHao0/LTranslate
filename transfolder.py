@@ -3,14 +3,14 @@ import os
 import concurrent.futures
 
 
-def evaluate_item(file, lang_src, lang_tgt):
-    print(file, lang_src, lang_tgt)
+def evaluate_item(file, lang_tgt):
+    print(file, lang_tgt)
     os.system(
-        f'python3 ./LTranslate/translate.py {file} {lang_src} {lang_tgt}')
+        f'python3 ./LTranslate/translate.py {file} {lang_tgt}')
 
 
 def main(argv):
-    path, lang_src, lang_tgt = argv
+    path, lang_tgt = argv
 
     list_of_files = []
     for (dirpath, dirnames, filenames) in os.walk(path):
@@ -22,7 +22,7 @@ def main(argv):
 
     with concurrent.futures.ProcessPoolExecutor(max_workers=12) as executor:
         for file in list_of_files:
-            executor.submit(evaluate_item, file, lang_src, lang_tgt)
+            executor.submit(evaluate_item, file, lang_tgt)
 
 
 if __name__ == "__main__":
