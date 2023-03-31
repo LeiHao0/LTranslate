@@ -18,7 +18,7 @@ def load_conf():
         os.environ[OPENAI_API_KEY] = conf[OPENAI_API_KEY]
 
 
-def split_file_by_char_num(file_path, c=1000):
+def split_file_by_char_num(file_path, c=888):
     with open(file_path, 'r') as file:
         lines = file.readlines()
         split_lines = []
@@ -42,12 +42,11 @@ def write_md(file_path, content: str):
 
 def call_openai(file_content):
 
-    log = f'{len(file_content)} characters, {len(file_content)/1024} kb\n'
-    print(log)
-
-    # sleep 1s - 3s
-    time.sleep(random.randint(1, 3))
-    return file_content
+    # log = f'from {len(file_content)} chars, {len(file_content)/1024} kb\n'
+    # print(log)
+    
+    # time.sleep(random.randint(1, 3))
+    # return file_content
 
     lang = os.getenv(TO_LANGUAGE)
     openai.api_key = os.getenv(OPENAI_API_KEY)
@@ -61,32 +60,43 @@ def call_openai(file_content):
                                                     "content": file_content},
                                             ])
     content = response['choices'][0]['message']['content']
+
+    log = f'from {len(file_content)} chars to {len(content)} chars\n'
+    print(log)
     return content
 
 
 def call_openai_async(inputs):
-    file, file_chunks = inputs
+    file, to, file_chunks = inputs
+
+    filename = os.path.basename(file)
+    to_file = os.path.join(to, filename)
+
+    if os.path.isfile(to_file):
+        print(f'{to_file} already exists')
+        return
+
+    print(f'Processing {file} to {to_file} ...')
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
         results = list(executor.map(call_openai, file_chunks))
 
         translated_text = '\n\n'.join(results)
-        print(f"translated a {file} to {len(translated_text)}")
 
-        # write_md(file, translated_text)
+        write_md(to_file, translated_text)
         return translated_text
 
 
-def translate_file(file):
+def translate_file(file, to):
     file_chunks = split_file_by_char_num(file)
-    content = call_openai_async((file, file_chunks))
+    content = call_openai_async((file, to, file_chunks))
 
     return content
 
 
-def translate_files(files):
-    inputs = [(file, split_file_by_char_num(file)) for file in files]
-    
+def translate_files(files, to):
+    inputs = [(file, to, split_file_by_char_num(file)) for file in files]
+
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
         results = list(executor.map(call_openai_async, inputs))
         return results
@@ -94,38 +104,45 @@ def translate_files(files):
 
 def read_all_md_files(path='.'):
     files = []
-    for file in os.listdir(path):
+    for file in sorted(os.listdir(path)):
         if file.endswith(".md"):
             file_path = os.path.join(path, file)
             files.append(file_path)
     return files
 
 
+def translate(ori, to, lang='en'):
+    load_conf()
+    lang = 'en'
+    lang_dict = {
+        "de": "German",
+        "en": "English",
+        "id": "Indonesian",
+        "ja": "Japanese",
+        "ko": "Korean",
+        "ru": "Russian",
+        "vi": "Vietnamese",
+        "tw": "Chinese (Traditional)",
+    }
+    os.environ[TO_LANGUAGE] = lang_dict[lang]
+
+    if os.path.isdir(ori):
+        files = read_all_md_files(ori)
+        translate_files(files, to)
+    elif os.path.isfile(ori):
+        translate_file(ori, to)
+
+
 if __name__ == "__main__":
     load_conf()
 
     args = sys.argv[1:]
-    lang = 'en'
-    if len(args) > 1:
-        # de, en, id, ja, ko, ru, vi, tw
-        lang_dict = {
-            "de": "German",
-            "en": "English",
-            "id": "Indonesian",
-            "ja": "Japanese",
-            "ko": "Korean",
-            "ru": "Russian",
-            "vi": "Vietnamese",
-            "tw": "Chinese (Traditional)",
-        }
-        lang = args[1]
-        os.environ[TO_LANGUAGE] = lang_dict[lang]
-    else:
-        print('please input language code, like de, en, id, ja, ko, ru, vi, tw')
-    if len(args) > 0:
-        path = args[0]
-        if os.path.isdir(path):
-            files = read_all_md_files(path)
-            translate_files(files)
-        elif os.path.isfile(path):
-            translate_file(path)
+    if len(args) == 0:
+        print("Please provide the file path or directory path")
+        # sys.exit(1)
+    elif len(args) == 2:
+        ori, to = args
+        translate(ori, to)
+    elif len(args) == 3:
+        ori, to, lang = args
+        translate(ori, to, lang)
