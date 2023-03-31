@@ -1,12 +1,10 @@
 import sys
 import os
-import concurrent.futures
 
 
 def evaluate_item(file, lang_tgt):
     print(file, lang_tgt)
-    os.system(
-        f'python3 ./LTranslate/translate.py {file} {lang_tgt}')
+    os.system(f'python ./LTranslate/translate.py {file} {lang_tgt}')
 
 
 def main(argv):
@@ -20,9 +18,8 @@ def main(argv):
                     file = os.sep.join([dirpath, filename])
                     list_of_files.append(file)
 
-    with concurrent.futures.ProcessPoolExecutor(max_workers=12) as executor:
-        for file in list_of_files:
-            executor.submit(evaluate_item, file, lang_tgt)
+    for file in list_of_files:
+        evaluate_item(file, lang_tgt)
 
 
 if __name__ == "__main__":

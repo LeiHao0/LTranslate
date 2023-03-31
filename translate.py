@@ -1,96 +1,131 @@
-import getopt
+import yaml
 import sys
+
 import os
-from google_trans_new import google_translator
-# https://github.com/lushan88a/google_trans_new
+import openai
 
-# translate.py filename lang_src lang_tgt
+import concurrent.futures
+import time
+import random
 
-# lang:
-
-# https://cloud.google.com/translate/docs/languages
-
-translator = google_translator()
+OPENAI_API_KEY = "OPENAI_API_KEY"
+TO_LANGUAGE = "TO_LANGUAGE"
 
 
-def translate(text):
-    return translator.translate(text, lang_tgt=lang_tgt)
+def load_conf():
+    with open('conf.yml', 'r') as file:
+        conf = yaml.load(file, Loader=yaml.FullLoader)
+        os.environ[OPENAI_API_KEY] = conf[OPENAI_API_KEY]
 
 
-def markdown(lines):
-    transText = ""
-    skip = False
-    for line in lines:
-        transLine = ""
-        l = line.lstrip(' ')
-        leadingSpaces = len(line) - len(l)
-        if l.strip() == '<!--more-->' or l.strip() == '---' or l.strip() == '':
-            transLine = l
-        elif l.startswith('title: '):
-            transLine = 'title: ' + translate(l[6:])
-        elif l.startswith(('$$', '![](', 'type: ', 'date: ', 'update: ', 'updated: ', 'permalink: ', 'tags: ', 'mathjax: ')):
-            transLine = l
-        elif l.startswith(('```', '{% ', '<details>', '</details>', '<div ', '</div>', '<video ', '</video>')):
-            skip = not skip
-            transLine = l
-        elif l.startswith('1. '):
-            transLine = '1. ' + translate(l[3:])
-        elif l.startswith('> '):
-            transLine = '> ' + translate(l[1:])
-        elif l.startswith('- '):
-            transLine = '- ' + translate(l[1:])
-        elif l.startswith('# '):
-            transLine = '# ' + translate(l[1:])
-        elif l.startswith('## '):
-            transLine = '## ' + translate(l[2:])
-        elif l.startswith('### '):
-            transLine = '### ' + translate(l[3:])
-        elif l.startswith('#### '):
-            transLine = '#### ' + translate(l[4:])
-        elif l.startswith('type: '):
-            transLine = 'type: ' + translate(l[5:])
-        else:
-            if skip:
-                transLine = l
-            else:
-                transLine = translate(l)
-        for k, v in {'【': '[', '（': '(', '）': ')', '【': ']'}.items():
-            transLine = transLine.replace(k, v)
-        transLine = transLine.replace('] (', '](')
-        transLine = transLine.replace('/cn/', f'/{lang_tgt}/')
+def split_file_by_char_num(file_path, c=1000):
+    with open(file_path, 'r') as file:
+        lines = file.readlines()
+        split_lines = []
+        text = ''
+        for line in lines:
+            text += line
+            if len(text) >= c:
+                split_lines.append(text)
+                text = ''
+        if text != '':
+            split_lines.append(text)
 
-        transLine = ' '*leadingSpaces + transLine + '\n'
-        # print(line, ' -> ', transLine)
-        transText += transLine
-
-    # print('\n\n', '-'*80, '\n\n', transText)
-    return transText
+        joined_lines = [''.join(sublist) for sublist in split_lines]
+        return joined_lines
 
 
-def file2Lines():
-    f = open(filename, 'r')
-    lines = [line.rstrip('\n') for line in f]
-    f.close()
-    return lines
+def write_md(file_path, content: str):
+    with open(file_path, "w") as file:
+        file.write(content)
 
 
-def trans2File(transText):
-    f = open(filename, 'w')
-    f.write(transText)
-    f.close()
+def call_openai(file_content):
+
+    log = f'{len(file_content)} characters, {len(file_content)/1024} kb\n'
+    print(log)
+
+    # sleep 1s - 3s
+    time.sleep(random.randint(1, 3))
+    return file_content
+
+    lang = os.getenv(TO_LANGUAGE)
+    openai.api_key = os.getenv(OPENAI_API_KEY)
+    content = f'Translate markdown text to {lang}. Keep whitespace and newlines. Keep the same markdown syntax. Only return translated result in the same markdown format.'
+
+    response = openai.ChatCompletion.create(model="gpt-3.5-turbo",
+                                            messages=[
+                                                {"role": "system",
+                                                    "content": content},
+                                                {"role": "user",
+                                                    "content": file_content},
+                                            ])
+    content = response['choices'][0]['message']['content']
+    return content
 
 
-def main(argv):
-    global filename, lang_tgt
-    filename, lang_tgt = argv
+def call_openai_async(inputs):
+    file, file_chunks = inputs
 
-    if lang_tgt == "tw":
-        lang_tgt = "zh-TW"
-    if lang_tgt == "cn":
-        lang_tgt = "zh-CN"
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+        results = list(executor.map(call_openai, file_chunks))
 
-    trans2File(markdown(file2Lines()))
+        translated_text = '\n\n'.join(results)
+        print(f"translated a {file} to {len(translated_text)}")
+
+        # write_md(file, translated_text)
+        return translated_text
+
+
+def translate_file(file):
+    file_chunks = split_file_by_char_num(file)
+    content = call_openai_async((file, file_chunks))
+
+    return content
+
+
+def translate_files(files):
+    inputs = [(file, split_file_by_char_num(file)) for file in files]
+    
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(call_openai_async, inputs))
+        return results
+
+
+def read_all_md_files(path='.'):
+    files = []
+    for file in os.listdir(path):
+        if file.endswith(".md"):
+            file_path = os.path.join(path, file)
+            files.append(file_path)
+    return files
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    load_conf()
+
+    args = sys.argv[1:]
+    lang = 'en'
+    if len(args) > 1:
+        # de, en, id, ja, ko, ru, vi, tw
+        lang_dict = {
+            "de": "German",
+            "en": "English",
+            "id": "Indonesian",
+            "ja": "Japanese",
+            "ko": "Korean",
+            "ru": "Russian",
+            "vi": "Vietnamese",
+            "tw": "Chinese (Traditional)",
+        }
+        lang = args[1]
+        os.environ[TO_LANGUAGE] = lang_dict[lang]
+    else:
+        print('please input language code, like de, en, id, ja, ko, ru, vi, tw')
+    if len(args) > 0:
+        path = args[0]
+        if os.path.isdir(path):
+            files = read_all_md_files(path)
+            translate_files(files)
+        elif os.path.isfile(path):
+            translate_file(path)
