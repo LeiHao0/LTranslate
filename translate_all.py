@@ -6,9 +6,13 @@ import subprocess
 from translate import translate
 
 
-def ignore_git_folder(dir, files):
+def ignore_posts_folder(dir, files):
     """Ignore the .git, "_posts", "about", "books" folder"""
     return [f for f in files if f == ".git" or f == "_posts" or f == "about" or f == "books"]
+
+
+def ignore_git_folder(dir, files):
+    return [f for f in files if f == ".git"]
 
 
 def copy_to_lang(languages):
@@ -16,7 +20,7 @@ def copy_to_lang(languages):
     for l in languages:
         # shutil.rmtree(l, ignore_errors=True)
         shutil.copytree("cn", l, dirs_exist_ok=True,
-                        ignore=ignore_git_folder)
+                        ignore=ignore_posts_folder)
         with open(f"{l}/_config.yml", "r") as f:
             config = f.read()
             config = config.replace("zh-CN", l)
@@ -42,13 +46,15 @@ def copy_to_lang(languages):
             to = f"{l}/source/{f}"
             os.makedirs(to, exist_ok=True)
             print(f"Translating {ori} to {to}")
-            translate(ori, to)
+            translate(ori, to, l)
 
     # cp en to root
     dirs_to_copy = ["node_modules", "scaffolds", "source", "themes"]
     files_to_copy = ["_config.next.yml", "_config.yml", "db.json",
                      "package-lock.json", "package.json", "yarn.lock"]
+
     for d in dirs_to_copy:
+        shutil.rmtree(d, ignore_errors=True)
         shutil.copytree(f"en/{d}", d, dirs_exist_ok=True,
                         ignore=ignore_git_folder)
     for f in files_to_copy:
@@ -69,6 +75,8 @@ if __name__ == "__main__":
     # cd to ../
     os.chdir("..")
     print(os.getcwd())
-    # langs = ["de", "id", "ja", "ko", "ru", "vi", "tw"]
-    langs = ["en"]
+    langs = ["en", "ja", "ko", "vi"]
     copy_to_lang(langs)
+    # langs = ["de", "id", "ar", "fr", "ru", "tw"]
+    # langs = ["de", "id", "ar", "fr", "ru"]
+    # copy_to_lang(langs)

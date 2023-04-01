@@ -11,6 +11,7 @@ import random
 OPENAI_API_KEY = "OPENAI_API_KEY"
 TO_LANGUAGE = "TO_LANGUAGE"
 
+max_workers = 3
 
 def load_conf():
     with open('conf.yml', 'r') as file:
@@ -50,7 +51,7 @@ def call_openai(file_content):
 
     lang = os.getenv(TO_LANGUAGE)
     openai.api_key = os.getenv(OPENAI_API_KEY)
-    content = f'Translate markdown text to {lang}. Keep whitespace and newlines. Keep the same markdown syntax. Only return translated result in the same markdown format.'
+    content = f'Translate text to {lang}. Keep whitespace and newlines. Keep the same markdown syntax. Only return translated result with the same markdown format.'
 
     response = openai.ChatCompletion.create(model="gpt-3.5-turbo",
                                             messages=[
@@ -78,10 +79,10 @@ def call_openai_async(inputs):
 
     print(f'Processing {file} to {to_file} ...')
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         results = list(executor.map(call_openai, file_chunks))
 
-        translated_text = '\n\n'.join(results)
+        translated_text = '\n\n'.join(results) + '\n\n>Powered by OpenAI, gpt-3.5-turbo-0301'
 
         write_md(to_file, translated_text)
         return translated_text
@@ -97,32 +98,34 @@ def translate_file(file, to):
 def translate_files(files, to):
     inputs = [(file, to, split_file_by_char_num(file)) for file in files]
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         results = list(executor.map(call_openai_async, inputs))
         return results
 
 
 def read_all_md_files(path='.'):
     files = []
-    for file in sorted(os.listdir(path)):
+    for file in sorted(os.listdir(path), reverse=True):
         if file.endswith(".md"):
             file_path = os.path.join(path, file)
             files.append(file_path)
     return files
 
 
-def translate(ori, to, lang='en'):
+def translate(ori, to, lang):
     load_conf()
-    lang = 'en'
     lang_dict = {
+        "ar": "Arabic",
         "de": "German",
         "en": "English",
+        "fr": "French",
         "id": "Indonesian",
         "ja": "Japanese",
         "ko": "Korean",
         "ru": "Russian",
         "vi": "Vietnamese",
         "tw": "Chinese (Traditional)",
+        "zh": "Chinese (Simplified)",
     }
     os.environ[TO_LANGUAGE] = lang_dict[lang]
 
