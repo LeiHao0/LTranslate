@@ -19,41 +19,30 @@ def load_conf():
         os.environ[OPENAI_API_KEY] = conf[OPENAI_API_KEY]
 
 
-def split_file_by_char_num(file_path, c=888):
-    with open(file_path, 'r') as file:
-        lines = file.readlines()
-        split_lines = []
-        text = ''
-        for line in lines:
-            text += line
-            if len(text) >= c:
-                split_lines.append(text)
-                text = ''
-        if text != '':
-            split_lines.append(text)
-
-        joined_lines = [''.join(sublist) for sublist in split_lines]
-        return joined_lines
-
-
 def write_md(file_path, content: str):
     with open(file_path, "w") as file:
         file.write(content)
 
+def read_file(file_path):
+    try:
+        with open(file_path, 'r') as file:
+            file_content = file.read()
+            return file_content
+    except FileNotFoundError:
+        print("File not found.")
+    except PermissionError:
+        print("Permission denied to read the file.")
+    except Exception as e:
+        print("An error occurred:", str(e))
+        return None
 
-def call_openai(file_content):
 
-    # log = f'from {len(file_content)} chars, {len(file_content)/1024} kb\n'
-    # print(log)
+def call_openai(file_content, lang):
     
-    # time.sleep(random.randint(1, 3))
-    # return file_content
-
-    lang = os.getenv(TO_LANGUAGE)
     openai.api_key = os.getenv(OPENAI_API_KEY)
-    content = f'Translate text to {lang}. Keep whitespace and newlines. Keep the same markdown syntax. Only return translated result with the same markdown format.'
+    content = f'Fix this markdown document syntax error, then translate  to {lang}.'
 
-    response = openai.ChatCompletion.create(model="gpt-3.5-turbo",
+    response = openai.ChatCompletion.create(model="gpt-3.5-turbo-16k",
                                             messages=[
                                                 {"role": "system",
                                                     "content": content},
@@ -82,21 +71,22 @@ def call_openai_async(inputs):
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         results = list(executor.map(call_openai, file_chunks))
 
-        translated_text = '\n\n'.join(results) + '\n\n>Powered by OpenAI, gpt-3.5-turbo-0301'
+        translated_text = '\n\n'.join(results) + '\n\n>Powered by OpenAI, gpt-3.5-turbo-16k'
 
         write_md(to_file, translated_text)
         return translated_text
 
 
-def translate_file(file, to):
-    file_chunks = split_file_by_char_num(file)
-    content = call_openai_async((file, to, file_chunks))
+def translate_file(file, to, lang):
+    content = read_file(file)
+    if content:
+        translated_text = call_openai(content, lang)
+        write_md(to, translated_text)
 
-    return content
+    return translated_text
 
-
-def translate_files(files, to):
-    inputs = [(file, to, split_file_by_char_num(file)) for file in files]
+def translate_files(files, to, lang):
+    inputs = [(file, lang, translate_file(file, lang)) for file in files]
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         results = list(executor.map(call_openai_async, inputs))
@@ -115,25 +105,19 @@ def read_all_md_files(path='.'):
 def translate(ori, to, lang):
     load_conf()
     lang_dict = {
-        "ar": "Arabic",
-        "de": "German",
         "en": "English",
-        "fr": "French",
         "id": "Indonesian",
         "ja": "Japanese",
         "ko": "Korean",
-        "ru": "Russian",
         "vi": "Vietnamese",
         "tw": "Chinese (Traditional)",
-        "zh": "Chinese (Simplified)",
     }
-    os.environ[TO_LANGUAGE] = lang_dict[lang]
 
     if os.path.isdir(ori):
         files = read_all_md_files(ori)
-        translate_files(files, to)
+        translate_files(ori, to, lang)
     elif os.path.isfile(ori):
-        translate_file(ori, to)
+        translate_file(ori, to, lang)
 
 
 if __name__ == "__main__":
