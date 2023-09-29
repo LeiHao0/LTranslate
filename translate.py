@@ -1,3 +1,6 @@
+import requests
+from retrying import retry
+import tiktoken
 import yaml
 import sys
 
@@ -9,12 +12,12 @@ import time
 import random
 
 OPENAI_API_KEY = "OPENAI_API_KEY"
-TO_LANGUAGE = "TO_LANGUAGE"
 
-max_workers = 3
+max_workers = 2
+
 
 def load_conf():
-    with open('conf.yml', 'r') as file:
+    with open('LTranslate/conf.yml', 'r') as file:
         conf = yaml.load(file, Loader=yaml.FullLoader)
         os.environ[OPENAI_API_KEY] = conf[OPENAI_API_KEY]
 
@@ -22,6 +25,7 @@ def load_conf():
 def write_md(file_path, content: str):
     with open(file_path, "w") as file:
         file.write(content)
+
 
 def read_file(file_path):
     try:
@@ -37,12 +41,28 @@ def read_file(file_path):
         return None
 
 
+def count_token(content):
+    return num_tokens_from_string(content, "cl100k_base")
+
+
+def num_tokens_from_string(string: str, encoding_name: str) -> int:
+    """Returns the number of tokens in a text string."""
+    encoding = tiktoken.get_encoding(encoding_name)
+    encoding = tiktoken.encoding_for_model("gpt-3.5-turbo")
+    num_tokens = len(encoding.encode(string))
+    return num_tokens
+
+
 def call_openai(file_content, lang):
-    
-    openai.api_key = os.getenv(OPENAI_API_KEY)
+    tokens = count_token(file_content)
+    model = "gpt-3.5-turbo-16k" if tokens > 2000 else "gpt-3.5-turbo"
+    print("tokens: ", tokens, "model: ", model)
+
     content = f'Fix this markdown document syntax error, then translate  to {lang}.'
 
-    response = openai.ChatCompletion.create(model="gpt-3.5-turbo-16k",
+    openai.api_key = os.getenv(OPENAI_API_KEY)
+
+    response = openai.ChatCompletion.create(model=model,
                                             messages=[
                                                 {"role": "system",
                                                     "content": content},
@@ -50,50 +70,27 @@ def call_openai(file_content, lang):
                                                     "content": file_content},
                                             ])
     content = response['choices'][0]['message']['content']
-
-    log = f'from {len(file_content)} chars to {len(content)} chars\n'
-    print(log)
     return content
 
 
-def call_openai_async(inputs):
-    file, to, file_chunks = inputs
-
-    filename = os.path.basename(file)
-    to_file = os.path.join(to, filename)
-
-    if os.path.isfile(to_file):
-        print(f'{to_file} already exists')
-        return
-
-    print(f'Processing {file} to {to_file} ...')
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        results = list(executor.map(call_openai, file_chunks))
-
-        translated_text = '\n\n'.join(results) + '\n\n>Powered by OpenAI, gpt-3.5-turbo-16k'
-
-        write_md(to_file, translated_text)
-        return translated_text
+def translate_file_to(inputs):
+    file, to, lang = inputs
+    print("translate_file_to: ", file, to, lang)
+    text = translate_file(file, lang)
+    text = text + '\n\n>Translated by gpt-3.5-turbo'
+    write_md(to, text)
+    return text
 
 
-def translate_file(file, to, lang):
+def translate_file(file, lang):
     content = read_file(file)
     if content:
         translated_text = call_openai(content, lang)
-        write_md(to, translated_text)
 
     return translated_text
 
-def translate_files(files, to, lang):
-    inputs = [(file, lang, translate_file(file, lang)) for file in files]
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        results = list(executor.map(call_openai_async, inputs))
-        return results
-
-
-def read_all_md_files(path='.'):
+def read_md_paths(path='.'):
     files = []
     for file in sorted(os.listdir(path), reverse=True):
         if file.endswith(".md"):
@@ -102,7 +99,7 @@ def read_all_md_files(path='.'):
     return files
 
 
-def translate(ori, to, lang):
+def translate(ori, to, lang='en'):
     load_conf()
     lang_dict = {
         "en": "English",
@@ -114,10 +111,17 @@ def translate(ori, to, lang):
     }
 
     if os.path.isdir(ori):
-        files = read_all_md_files(ori)
-        translate_files(ori, to, lang)
+        md_paths = read_md_paths(ori)
+        lang = lang_dict[lang]
+        inputs = [(md, os.path.join(to, os.path.basename(md)), lang)
+                  for md in md_paths]
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            results = executor.map(translate_file_to, inputs)
+        return results
+
     elif os.path.isfile(ori):
-        translate_file(ori, to, lang)
+        text = translate_file_to(ori, to, lang)
+        return text
 
 
 if __name__ == "__main__":
@@ -127,6 +131,8 @@ if __name__ == "__main__":
     if len(args) == 0:
         print("Please provide the file path or directory path")
         # sys.exit(1)
+    elif len(args) == 1:
+        print("Please provide the lang")
     elif len(args) == 2:
         ori, to = args
         translate(ori, to)

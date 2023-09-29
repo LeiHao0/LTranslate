@@ -75,8 +75,6 @@ if __name__ == "__main__":
     # cd to ../
     os.chdir("..")
     print(os.getcwd())
-    langs = ["en", "ja", "ko", "vi", "tw"]
+    # langs = ["en", "ja", "ko", "vi", "tw"]
+    langs = ["en"]
     copy_to_lang(langs)
-    # langs = ["de", "id", "ar", "fr", "ru", "tw"]
-    # langs = ["de", "id", "ar", "fr", "ru"]
-    # copy_to_lang(langs)
