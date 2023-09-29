@@ -48,6 +48,11 @@ def copy_to_lang(languages):
             print(f"Translating {ori} to {to}")
             translate(ori, to, l)
 
+    copy_en_to_root()
+
+
+def copy_en_to_root():
+
     # cp en to root
     dirs_to_copy = ["node_modules", "scaffolds", "source", "themes"]
     files_to_copy = ["_config.next.yml", "_config.yml", "db.json",
@@ -78,3 +83,5 @@ if __name__ == "__main__":
     # langs = ["en", "ja", "ko", "vi", "tw"]
     langs = ["en"]
     copy_to_lang(langs)
+
+    # copy_en_to_root()

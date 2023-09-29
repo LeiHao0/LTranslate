@@ -13,7 +13,7 @@ import random
 
 OPENAI_API_KEY = "OPENAI_API_KEY"
 
-max_workers = 2
+max_workers = 1
 
 
 def load_conf():
@@ -120,7 +120,7 @@ def translate(ori, to, lang='en'):
         return results
 
     elif os.path.isfile(ori):
-        text = translate_file_to(ori, to, lang)
+        text = translate_file_to((ori, to, lang))
         return text
 
 
